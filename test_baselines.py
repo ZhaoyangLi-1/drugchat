@@ -91,6 +91,91 @@ def generate_answer_batch(model, tokenizer, generation_config, prefix, suffix, c
     return answers
 
 
+def evaluate_new_dataset(model, tokenizer, generation_config, prefix, suffix, model_name):
+    """
+    Evaluate the model on the old dataset.
+    """
+    json_file_path = os.path.join(CURRENT_DIR, "eval_results/old/gpt_results.json")
+
+    with open(json_file_path, "r") as f:
+        data = json.load(f)
+
+    results = {}
+    smiles_keys = list(data.keys())
+    total = len(smiles_keys)
+
+    for i in tqdm(range(0, total, BATCH_SIZE), desc=f"Evaluating {model_name}", ncols=100):
+        batch_keys = smiles_keys[i:i + BATCH_SIZE]
+        batch_contexts = [
+            data[k]["query"].replace(
+                "\nBased on the SMILES of these two drugs, describe their interaction mechanism in one sentence, assuming typical pharmacological behavior. Do not include any reasoning or uncertainty.",
+                ""
+            ) for k in batch_keys
+        ]
+        batch_answers = generate_answer_batch(
+            model, tokenizer, generation_config, prefix, suffix, batch_contexts
+        )
+
+        for k, ans in zip(batch_keys, batch_answers):
+            results[k] = [
+                data[k]["query"],
+                data[k]["ground_truth"],
+                ans
+            ]
+
+    output_file_path = os.path.join(CURRENT_DIR, f"eval_results/old/{model_name}_results.json")
+    with open(output_file_path, "w") as f:
+        json.dump(results, f, indent=4)
+    print(f"Results saved to {output_file_path}")
+
+
+def evaluate_old_dataset(model, tokenizer, generation_config, prefix, suffix, model_name):
+    """
+    Evaluate the model on the new dataset.
+    """
+    json_file_path = os.path.join(CURRENT_DIR, "eval_results/old/gpt_results.json")
+
+    with open(json_file_path, "r") as f:
+        data = json.load(f)
+
+    results = {}
+    smiles_keys = list(data.keys())
+    total = len(smiles_keys)
+
+    for i in tqdm(range(0, total, BATCH_SIZE), desc=f"Evaluating {model_name}", ncols=100):
+        # batch_keys = smiles_keys[i:i + BATCH_SIZE]
+        # batch_contexts = [
+        #     data[k]["query"].replace(
+        #         "\nBased on the SMILES of these two drugs, describe their interaction mechanism in one sentence, assuming typical pharmacological behavior. Do not include any reasoning or uncertainty.",
+        #         ""
+        #     ) for k in batch_keys
+        # ]
+        # batch_answers = generate_answer_batch(
+        #     model, tokenizer, generation_config, prefix, suffix, batch_contexts
+        # )
+        batch_keys = smiles_keys[i:i + BATCH_SIZE]
+        inside_batch_keys = [k for k in batch_keys if k in data]
+        batch_contexts = [
+            data[k]["query"].replace(
+                "\nBased on the SMILES of these two drugs, describe their interaction mechanism in one sentence, assuming typical pharmacological behavior. Do not include any reasoning or uncertainty.",
+                ""
+            ) for k in inside_batch_keys
+        ]
+
+        for k, ans in zip(batch_keys, batch_answers):
+            results[k] = [
+                data[k]["query"],
+                data[k]["ground_truth"],
+                ans
+            ]
+
+    output_file_path = os.path.join(CURRENT_DIR, f"eval_results/new/{model_name}_results.json")
+    with open(output_file_path, "w") as f:
+        json.dump(results, f, indent=4)
+    print(f"Results saved to {output_file_path}")
+
+
+
 def main():
     # models = ["MMed-Llama-3-8B", "Apollo-MoE-7B"]
     # models = ["MMed-Llama-3-8B"]
@@ -101,39 +186,17 @@ def main():
         data = json.load(f)
     removed = data.pop("mean_scores", None)
     print(f"Removed mean scores: {removed}")
+    print(f"Evaluating {len(data)} samples from the new dataset...")
     for model_name in models:
-        print(f"Testing model: {model_name}")
-        tokenizer, model, generation_config, prefix, suffix = load_model(model_name)
-        results = {}
-
-        smiles_keys = list(data.keys())
-        total = len(smiles_keys)
-
-        for i in tqdm(range(0, total, BATCH_SIZE), desc=f"Evaluating {model_name}", ncols=100):
-            batch_keys = smiles_keys[i:i + BATCH_SIZE]
-            batch_contexts = [
-                data[k]["query"].replace(
-                    "\nBased on the SMILES of these two drugs, describe their interaction mechanism in one sentence, assuming typical pharmacological behavior. Do not include any reasoning or uncertainty.",
-                    ""
-                ) for k in batch_keys
-            ]
-
-            batch_answers = generate_answer_batch(
-                model, tokenizer, generation_config, prefix, suffix, batch_contexts
-            )
-
-            for k, ans in zip(batch_keys, batch_answers):
-                results[k] = [
-                    data[k]["query"],
-                    data[k]["ground_truth"],
-                    ans
-                ]
-
-        output_file_path = os.path.join(CURRENT_DIR, f"eval_results/new/{model_name}_results.json")
-        with open(output_file_path, "w") as f:
-            json.dump(results, f, indent=4)
-        print(f"Results saved to {output_file_path}")
-
+        tokenizer, model, generation_config, static_prompt_prefix, static_prompt_suffix = load_model(model_name)
+        evaluate_new_dataset(model, tokenizer, generation_config, static_prompt_prefix, static_prompt_suffix, model_name)
+        print(f"Evaluation for {model_name} completed.")
+    # Evaluate the new dataset
+    print("Evaluating the new dataset...")
+    for model_name in models:
+        tokenizer, model, generation_config, static_prompt_prefix, static_prompt_suffix = load_model(model_name)
+        evaluate_old_dataset(model, tokenizer, generation_config, static_prompt_prefix, static_prompt_suffix, model_name)
+        print(f"Evaluation for {model_name} completed.")
     print("Evaluation completed.")
 
 
