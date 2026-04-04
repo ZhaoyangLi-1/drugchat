@@ -251,8 +251,17 @@ class DrugChat(BaseModel):
         with torch.cuda.amp.autocast(autocast):
             features = self.encode_img(inputs, device, do_proj=False)
         with torch.cuda.amp.autocast(autocast_proj):
-            out = self.proj_feat(features, device)
-        return out
+            img_embeds, atts = self.proj_feat(features, device)
+
+        # Apply soft prompt to match training behavior (prompt_wrap concatenates
+        # soft_prompt to each compound's embedding during training)
+        if self.soft_prompt is not None:
+            num_compounds = img_embeds.shape[0]
+            soft = self.soft_prompt.expand(num_compounds, -1, -1).to(img_embeds.dtype)
+            img_embeds = torch.cat([img_embeds, soft], dim=1)
+            atts = torch.ones(img_embeds.size()[:-1], dtype=torch.long).to(device)
+
+        return img_embeds, atts
 
     def proj_feat(self, features, device):
         if self.feat_dims is not None:

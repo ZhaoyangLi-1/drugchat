@@ -17,7 +17,7 @@ model:
     graph_feat: 300
     image_feat: 512
   use_mlp: true
-  lora_rank: 0
+  lora_rank: 16
 
 datasets:
   drugs_dot_com:
@@ -57,15 +57,12 @@ datasets:
       storage_test: drug_drug_data/pubchem/test
     sample_ratio: 1
 
-
 run:
   task: image_text_pretrain
-  # optimizer
   lr_sched: "linear_warmup_cosine_lr"
   init_lr: 2e-5
   min_lr: 1e-6
   warmup_lr: 1e-6
-
   weight_decay: 0.01
   max_epoch: 20
   iters_per_epoch: 2206
@@ -73,15 +70,11 @@ run:
   batch_size_eval: 5
   num_workers: 1
   warmup_steps: 2206
-  
-
   seed: 42
-  output_dir: "/data2/zhaoyang/drugchat/output/mix-dataset-exp1-20-epochs-lr-2e-5-iters-2206"
-
+  output_dir: "output/ablation_lora_rank16"
   amp: True
   resume_ckpt_path: null
-
-  evaluate: False 
+  evaluate: False
   train_splits: ["train"]
   test_splits: ["test"]
   valid_splits: ["valid"]
